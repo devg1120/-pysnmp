@@ -84,6 +84,69 @@ def getALLDATA(IP, SNMPC):
             print(f"エラー: {errorStatus.prettyPrint()}")
             break
         else:
+            out_of_bounds = True
+            
+            for varBind in varBinds:
+                oid_obj, val_obj = varBind
+                oid_str = str(oid_obj)
+                val_str = val_obj.prettyPrint()
+
+                # 💡【重要】値自体にエラーメッセージが含まれている場合は、データ上書きを防ぐためスキップ
+                if "No more variables" in val_str:
+                    continue
+
+                # いずれかの OID がまだインターフェース関連の MIB の範囲内であれば続行
+                if oid_str.startswith('1.3.6.1.2.1.2.2.1') or oid_str.startswith('1.3.6.1.2.1.31.1.1.1'):
+                    out_of_bounds = False
+
+                # 該当する各項目へマッピング（インデックスごとに整理）
+                if oid_str.startswith(oid_index + '.'):  # 末尾のドットまで含めて厳密にマッチング
+                    idx = oid_str.replace(oid_index + '.', '')
+                    if idx.isdigit():  # インデックスが正しい数字である場合のみ格納
+                        interface_data.setdefault(idx, {})['index'] = val_str
+                        
+                elif oid_str.startswith(oid_descr + '.'):
+                    idx = oid_str.replace(oid_descr + '.', '')
+                    if idx.isdigit():
+                        interface_data.setdefault(idx, {})['descr'] = val_str
+                        
+                elif oid_str.startswith(oid_status + '.'):
+                    idx = oid_str.replace(oid_status + '.', '')
+                    if idx.isdigit():
+                        interface_data.setdefault(idx, {})['status'] = val_str
+                        
+                elif oid_str.startswith(oid_in + '.'):
+                    idx = oid_str.replace(oid_in + '.', '')
+                    if idx.isdigit():
+                        interface_data.setdefault(idx, {})['in'] = val_str
+                        
+                elif oid_str.startswith(oid_out + '.'):
+                    idx = oid_str.replace(oid_out + '.', '')
+                    if idx.isdigit():
+                        interface_data.setdefault(idx, {})['out'] = val_str
+                        
+                elif oid_str.startswith(oid_speed + '.'):
+                    idx = oid_str.replace(oid_speed + '.', '')
+                    if idx.isdigit():
+                        interface_data.setdefault(idx, {})['speed'] = val_str
+                        
+                elif oid_str.startswith(oid_alias + '.'):
+                    idx = oid_str.replace(oid_alias + '.', '')
+                    if idx.isdigit():
+                        interface_data.setdefault(idx, {})['alias'] = val_str
+
+            # すべてのデータが範囲外になったら終了
+            if out_of_bounds:
+                break
+    """
+    for errorIndication, errorStatus, errorIndex, varBinds in iterator:
+        if errorIndication:
+            print(f"通信エラー: {errorIndication}")
+            break
+        elif errorStatus:
+            print(f"エラー: {errorStatus.prettyPrint()}")
+            break
+        else:
             # 💡 【安全装置】
             # もし返ってきた OID が 4 つともすべて指定範囲（インターフェースのMIB）を
             # 完全に通り過ぎてしまった場合は、ループをその場で強制終了します。
@@ -124,6 +187,7 @@ def getALLDATA(IP, SNMPC):
             # すべてのデータが範囲外になったら終了
             if out_of_bounds:
                 break
+    """
 
     """
     for idx, metrics in sorted(interface_data.items(), key=lambda x: int(x[0]) if x[0].isdigit() else x[0]):
@@ -246,6 +310,10 @@ def job():
     for hostname in node_list.keys():
         if hostname.startswith('#'):
                 continue
+
+        ifNumber = get(node_list[hostname], snmpc_list[hostname], 'ifNumber', 0)
+        print(hostname, "ifNumber:", ifNumber)
+
         data = getALLDATA(node_list[hostname], snmpc_list[hostname])
         #data = getTEST(node_list[hostname])
         file_path = Path(savepath + '/' + yyyymm + '/' + dd + '/' + hhmmss+ '_' + hostname + '.txt')
@@ -255,7 +323,7 @@ def job():
         with file_path.open("a", encoding="utf-8") as f:
             for idx, metrics in sorted(data.items(), key=lambda x: int(x[0]) if x[0].isdigit() else x[0]):
 
-                print(f"--- {hostname} Interface Index: {idx} ---")
+                print(f"--- {hostname} Interface Index: {idx} / {ifNumber} ---")
                 print(f"  Index               : {metrics.get('index', 'N/A')}")
                 print(f"  Name                : {metrics.get('descr', 'N/A')}")
                 print(f"  Alias               : {metrics.get('alias', 'N/A')}")
